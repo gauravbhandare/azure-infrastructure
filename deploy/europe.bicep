@@ -434,7 +434,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-02-01' = {
 
 resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2023-04-15' = {
   name: '${shortResourcePrefix}-cosmos-db'
-  location: alternativeLocation
+  location: location
   tags: {
     CosmosAccountType: 'Non-Production'
   }
@@ -455,7 +455,7 @@ resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2023-04-15' = {
     }
     locations: [
       {
-        locationName: alternativeLocation
+        locationName: location
         failoverPriority: 0
         isZoneRedundant: false
       }

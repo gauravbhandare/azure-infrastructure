@@ -1,0 +1,637 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.36.177.2456",
+      "templateHash": "13585835412584748455"
+    }
+  },
+  "parameters": {
+    "sqlServerPassword": {
+      "type": "securestring"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "resourceNamePrefix": {
+      "type": "string",
+      "defaultValue": "[format('promitor-testing-resource-{0}', parameters('geo'))]"
+    },
+    "region": {
+      "type": "string",
+      "defaultValue": "Europe"
+    },
+    "geo": {
+      "type": "string",
+      "defaultValue": "eu"
+    },
+    "alternativeLocation": {
+      "type": "string",
+      "defaultValue": "northeurope"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Automation/automationAccounts",
+      "apiVersion": "2022-08-08",
+      "name": "[format('{0}-automation-1', parameters('resourceNamePrefix'))]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": {
+          "name": "Basic"
+        },
+        "encryption": {
+          "keySource": "Microsoft.Automation",
+          "identity": {}
+        }
+      }
+    },
+    {
+      "copy": {
+        "name": "workflowInWestEurope",
+        "count": "[length(range(1, 3))]"
+      },
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[format('{0}-workflow-{1}-{2}', parameters('resourceNamePrefix'), parameters('geo'), range(1, 3)[copyIndex()])]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "region": "[parameters('region')]",
+        "app": "promitor-resource-discovery-tests",
+        "instance": "[format('{0}-workflow-{1}-{2}', parameters('resourceNamePrefix'), parameters('geo'), range(1, 3)[copyIndex()])]"
+      },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {},
+          "triggers": {},
+          "actions": {},
+          "outputs": {}
+        },
+        "parameters": {}
+      }
+    },
+    {
+      "copy": {
+        "name": "workflowInNorthEurope",
+        "count": "[length(range(4, 3))]"
+      },
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[format('{0}-workflow-{1}-{2}', parameters('resourceNamePrefix'), parameters('geo'), range(4, 3)[copyIndex()])]",
+      "location": "[parameters('alternativeLocation')]",
+      "tags": {
+        "region": "[parameters('region')]",
+        "app": "promitor-resource-discovery-tests",
+        "instance": "[format('{0}-workflow-{1}-{2}', parameters('resourceNamePrefix'), parameters('geo'), range(4, 3)[copyIndex()])]"
+      },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {},
+          "triggers": {},
+          "actions": {},
+          "outputs": {}
+        },
+        "parameters": {}
+      }
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2021-06-01",
+      "name": "[format('{0}-logs', parameters('resourceNamePrefix'))]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "retentionInDays": 30,
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "features": {
+          "immediatePurgeDataOn30Days": true
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[format('{0}-telemetry', parameters('resourceNamePrefix'))]",
+      "location": "[parameters('location')]",
+      "kind": "web",
+      "properties": {
+        "Application_Type": "web",
+        "IngestionMode": "LogAnalytics",
+        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('resourceNamePrefix')))]",
+        "DisableLocalAuth": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('resourceNamePrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/webtests",
+      "apiVersion": "2022-06-15",
+      "name": "[format('{0}-web-app-availability-test', parameters('resourceNamePrefix'))]",
+      "location": "[parameters('location')]",
+      "kind": "ping",
+      "properties": {
+        "SyntheticMonitorId": "[format('{0}-web-app-availability-test', parameters('resourceNamePrefix'))]",
+        "Name": "[format('{0}-web-app-availability-test', parameters('resourceNamePrefix'))]",
+        "Description": "Standard availability test for the web application",
+        "Enabled": true,
+        "Frequency": 300,
+        "Timeout": 120,
+        "Kind": "ping",
+        "RetryEnabled": true,
+        "Locations": [
+          {
+            "Id": "us-ca-sjc-azr"
+          },
+          {
+            "Id": "us-tx-sn1-azr"
+          },
+          {
+            "Id": "us-il-ch1-azr"
+          },
+          {
+            "Id": "us-va-ash-azr"
+          },
+          {
+            "Id": "us-fl-mia-edge"
+          }
+        ],
+        "Configuration": {
+          "WebTest": "[format('<WebTest Name=\"{0}-web-app-availability-test\" Id=\"ABD48C0C-2F0D-4F5F-8E2E-8F5F8F5F8F5F\" Enabled=\"True\" CssProjectStructure=\"\" CssIteration=\"\" Timeout=\"120\" WorkItemIds=\"\" xmlns=\"http://microsoft.com/schemas/VisualStudio/TeamTest/2010\" Description=\"\" CredentialUserName=\"\" CredentialPassword=\"\" PreAuthenticate=\"True\" Proxy=\"default\" StopOnError=\"False\" RecordedResultFile=\"\" ResultsLocale=\"\"><Items><Request Method=\"GET\" Guid=\"a5f10126-e4cd-570d-961c-cea43999a200\" Version=\"1.1\" Url=\"https://{1}\" ThinkTime=\"0\" Timeout=\"120\" ParseDependentRequests=\"True\" FollowRedirects=\"True\" RecordResult=\"True\" Cache=\"False\" ResponseTimeGoal=\"0\" Encoding=\"utf-8\" ExpectedHttpStatusCode=\"200\" ExpectedResponseUrl=\"\" ReportingName=\"\" IgnoreHttpStatusCode=\"False\" /></Items></WebTest>', parameters('resourceNamePrefix'), reference(resourceId('Microsoft.Web/sites', format('{0}-web-app', parameters('resourceNamePrefix'))), '2022-09-01').defaultHostName)]"
+        }
+      },
+      "tags": {
+        "[format('hidden-link:{0}', resourceId('Microsoft.Insights/components', format('{0}-telemetry', parameters('resourceNamePrefix'))))]": "Resource"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', format('{0}-telemetry', parameters('resourceNamePrefix')))]",
+        "[resourceId('Microsoft.Web/sites', format('{0}-web-app', parameters('resourceNamePrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/metricAlerts",
+      "apiVersion": "2018-03-01",
+      "name": "[format('{0}-web-app-availability-alert', parameters('resourceNamePrefix'))]",
+      "location": "global",
+      "properties": {
+        "description": "Alert when web app availability test fails",
+        "severity": 1,
+        "enabled": true,
+        "scopes": [
+          "[resourceId('Microsoft.Insights/components', format('{0}-telemetry', parameters('resourceNamePrefix')))]"
+        ],
+        "evaluationFrequency": "PT1M",
+        "windowSize": "PT5M",
+        "criteria": {
+          "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+          "allOf": [
+            {
+              "name": "AvailabilityTestFailure",
+              "metricNamespace": "Microsoft.Insights/components",
+              "metricName": "availabilityResults/availabilityPercentage",
+              "operator": "LessThan",
+              "threshold": 100,
+              "timeAggregation": "Average",
+              "criterionType": "StaticThresholdCriterion",
+              "dimensions": [
+                {
+                  "name": "availabilityResult/name",
+                  "operator": "Include",
+                  "values": [
+                    "[format('{0}-web-app-availability-test', parameters('resourceNamePrefix'))]"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "actions": []
+      },
+      "tags": {
+        "[format('hidden-link:{0}', resourceId('Microsoft.Insights/components', format('{0}-telemetry', parameters('resourceNamePrefix'))))]": "Resource"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', format('{0}-telemetry', parameters('resourceNamePrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[format('{0}-telemetry-classic', parameters('resourceNamePrefix'))]",
+      "location": "[parameters('location')]",
+      "kind": "web",
+      "properties": {
+        "Application_Type": "web",
+        "RetentionInDays": 30
+      }
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces",
+      "apiVersion": "2021-11-01",
+      "name": "[format('{0}-messaging', parameters('resourceNamePrefix'))]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard",
+        "tier": "Standard"
+      },
+      "properties": {
+        "disableLocalAuth": false,
+        "zoneRedundant": false
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2022-09-01",
+      "name": "promitortestingstorage",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "supportsHttpsTrafficOnly": true,
+        "accessTier": "Hot"
+      }
+    },
+    {
+      "copy": {
+        "name": "serviceBusQueue",
+        "count": "[length(range(1, 15))]"
+      },
+      "type": "Microsoft.ServiceBus/namespaces/queues",
+      "apiVersion": "2021-11-01",
+      "name": "[format('{0}/{1}', format('{0}-messaging', parameters('resourceNamePrefix')), format('queue-{0}', range(1, 15)[copyIndex()]))]",
+      "properties": {
+        "maxDeliveryCount": 1
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', format('{0}-messaging', parameters('resourceNamePrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ServiceBus/namespaces/topics",
+      "apiVersion": "2021-11-01",
+      "name": "[format('{0}/{1}', format('{0}-messaging', parameters('resourceNamePrefix')), 'topic-1')]",
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.ServiceBus/namespaces', format('{0}-messaging', parameters('resourceNamePrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Sql/servers",
+      "apiVersion": "2021-11-01",
+      "name": "[format('{0}-sql-server', parameters('resourceNamePrefix'))]",
+      "location": "[parameters('alternativeLocation')]",
+      "properties": {
+        "administratorLogin": "tom",
+        "administratorLoginPassword": "[parameters('sqlServerPassword')]",
+        "version": "12.0",
+        "restrictOutboundNetworkAccess": "Disabled"
+      }
+    },
+    {
+      "copy": {
+        "name": "sqlDatabase",
+        "count": "[length(range(1, 3))]"
+      },
+      "type": "Microsoft.Sql/servers/databases",
+      "apiVersion": "2021-11-01",
+      "name": "[format('{0}/{1}', format('{0}-sql-server', parameters('resourceNamePrefix')), format('{0}-sql-db-{1}', parameters('resourceNamePrefix'), range(1, 3)[copyIndex()]))]",
+      "location": "[parameters('alternativeLocation')]",
+      "sku": {
+        "name": "Basic",
+        "tier": "Basic",
+        "capacity": 5
+      },
+      "properties": {
+        "zoneRedundant": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Sql/servers', format('{0}-sql-server', parameters('resourceNamePrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service",
+      "apiVersion": "2022-08-01",
+      "name": "[format('{0}-api-platform', parameters('resourceNamePrefix'))]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Consumption",
+        "capacity": 0
+      },
+      "properties": {
+        "publisherEmail": "tomkerkhove.opensource@gmail.com",
+        "publisherName": "Promitor"
+      }
+    },
+    {
+      "type": "Microsoft.Cdn/profiles",
+      "apiVersion": "2021-06-01",
+      "name": "[format('{0}-cdn', parameters('resourceNamePrefix'))]",
+      "location": "Global",
+      "sku": {
+        "name": "Standard_Microsoft"
+      },
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.Devices/IotHubs",
+      "apiVersion": "2021-07-02",
+      "name": "[format('{0}-iot-gateway', parameters('resourceNamePrefix'))]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "F1",
+        "capacity": 1
+      },
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.EventGrid/domains",
+      "apiVersion": "2022-06-15",
+      "name": "[format('{0}-event-domains', parameters('resourceNamePrefix'))]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "inputSchema": "CloudEventSchemaV1_0",
+        "publicNetworkAccess": "Enabled"
+      }
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2022-09-01",
+      "name": "[format('{0}-app-plan', parameters('resourceNamePrefix'))]",
+      "location": "northeurope",
+      "kind": "linux",
+      "tags": {},
+      "properties": {
+        "reserved": true
+      },
+      "sku": {
+        "tier": "Basic",
+        "name": "B1"
+      }
+    },
+    {
+      "type": "Microsoft.Insights/autoscalesettings",
+      "apiVersion": "2022-10-01",
+      "name": "[format('{0}-app-plan-autoscaling', parameters('resourceNamePrefix'))]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "profiles": [
+          {
+            "name": "Auto created scale condition",
+            "capacity": {
+              "minimum": "1",
+              "maximum": "2",
+              "default": "1"
+            },
+            "rules": [
+              {
+                "metricTrigger": {
+                  "metricName": "CpuPercentage",
+                  "metricNamespace": "microsoft.web/serverfarms",
+                  "metricResourceUri": "[resourceId('Microsoft.Web/serverfarms', format('{0}-app-plan', parameters('resourceNamePrefix')))]",
+                  "timeGrain": "PT1M",
+                  "statistic": "Average",
+                  "timeWindow": "PT10M",
+                  "timeAggregation": "Average",
+                  "operator": "GreaterThan",
+                  "threshold": 70,
+                  "dimensions": [],
+                  "dividePerInstance": false
+                },
+                "scaleAction": {
+                  "direction": "Increase",
+                  "type": "ChangeCount",
+                  "value": "1",
+                  "cooldown": "PT5M"
+                }
+              },
+              {
+                "metricTrigger": {
+                  "metricName": "CpuPercentage",
+                  "metricNamespace": "microsoft.web/serverfarms",
+                  "metricResourceUri": "[resourceId('Microsoft.Web/serverfarms', format('{0}-app-plan', parameters('resourceNamePrefix')))]",
+                  "timeGrain": "PT1M",
+                  "statistic": "Average",
+                  "timeWindow": "PT10M",
+                  "timeAggregation": "Average",
+                  "operator": "LessThan",
+                  "threshold": 30,
+                  "dimensions": [],
+                  "dividePerInstance": false
+                },
+                "scaleAction": {
+                  "direction": "Decrease",
+                  "type": "ChangeCount",
+                  "value": "1",
+                  "cooldown": "PT5M"
+                }
+              }
+            ]
+          }
+        ],
+        "enabled": false,
+        "name": "[format('{0}-app-plan-autoscaling', parameters('resourceNamePrefix'))]",
+        "targetResourceUri": "[resourceId('Microsoft.Web/serverfarms', format('{0}-app-plan', parameters('resourceNamePrefix')))]",
+        "notifications": [
+          {
+            "operation": "Scale",
+            "email": {
+              "sendToSubscriptionAdministrator": false,
+              "sendToSubscriptionCoAdministrators": false,
+              "customEmails": []
+            },
+            "webhooks": []
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', format('{0}-app-plan', parameters('resourceNamePrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2022-09-01",
+      "name": "[format('{0}-web-app', parameters('resourceNamePrefix'))]",
+      "location": "northeurope",
+      "tags": {},
+      "properties": {
+        "siteConfig": {
+          "appSettings": [
+            {
+              "name": "WEBSITES_ENABLE_APP_SERVICE_STORAGE",
+              "value": "false"
+            },
+            {
+              "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+              "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-telemetry', parameters('resourceNamePrefix'))), '2020-02-02').InstrumentationKey]"
+            },
+            {
+              "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+              "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-telemetry', parameters('resourceNamePrefix'))), '2020-02-02').ConnectionString]"
+            },
+            {
+              "name": "ApplicationInsightsAgent_EXTENSION_VERSION",
+              "value": "~3"
+            },
+            {
+              "name": "APPINSIGHTS_PROFILERFEATURE_VERSION",
+              "value": "1.0.0"
+            },
+            {
+              "name": "APPINSIGHTS_SNAPSHOTFEATURE_VERSION",
+              "value": "1.0.0"
+            }
+          ],
+          "linuxFxVersion": "DOCKER|mcr.microsoft.com/appsvc/staticsite:latest"
+        },
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('{0}-app-plan', parameters('resourceNamePrefix')))]",
+        "clientAffinityEnabled": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', format('{0}-telemetry', parameters('resourceNamePrefix')))]",
+        "[resourceId('Microsoft.Web/serverfarms', format('{0}-app-plan', parameters('resourceNamePrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2023-02-01",
+      "name": "promitorsecretstore",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": {
+          "family": "A",
+          "name": "standard"
+        },
+        "tenantId": "c8819874-9e56-4e3f-b1a8-1c0325138f27",
+        "accessPolicies": []
+      }
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts",
+      "apiVersion": "2023-04-15",
+      "name": "[format('{0}-cosmos-db', parameters('resourceNamePrefix'))]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "CosmosAccountType": "Non-Production"
+      },
+      "kind": "GlobalDocumentDB",
+      "identity": {
+        "type": "None"
+      },
+      "properties": {
+        "publicNetworkAccess": "Enabled",
+        "enableAutomaticFailover": false,
+        "enableFreeTier": true,
+        "databaseAccountOfferType": "Standard",
+        "disableLocalAuth": false,
+        "consistencyPolicy": {
+          "defaultConsistencyLevel": "Session",
+          "maxIntervalInSeconds": 5,
+          "maxStalenessPrefix": 100
+        },
+        "locations": [
+          {
+            "locationName": "[parameters('location')]",
+            "failoverPriority": 0,
+            "isZoneRedundant": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+      "apiVersion": "2023-04-15",
+      "name": "[format('{0}/{1}', format('{0}-cosmos-db', parameters('resourceNamePrefix')), 'example-db')]",
+      "properties": {
+        "resource": {
+          "id": "example-db"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', format('{0}-cosmos-db', parameters('resourceNamePrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+      "apiVersion": "2023-04-15",
+      "name": "[format('{0}/{1}/{2}', format('{0}-cosmos-db', parameters('resourceNamePrefix')), 'example-db', 'sample-docs')]",
+      "properties": {
+        "resource": {
+          "id": "sample-docs",
+          "partitionKey": {
+            "paths": [
+              "/id"
+            ],
+            "kind": "Hash"
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', format('{0}-cosmos-db', parameters('resourceNamePrefix')), 'example-db')]"
+      ]
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/throughputSettings",
+      "apiVersion": "2023-04-15",
+      "name": "[format('{0}/{1}/{2}/{3}', format('{0}-cosmos-db', parameters('resourceNamePrefix')), 'example-db', 'sample-docs', 'default')]",
+      "properties": {
+        "resource": {
+          "throughput": 400
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers', format('{0}-cosmos-db', parameters('resourceNamePrefix')), 'example-db', 'sample-docs')]"
+      ]
+    },
+    {
+      "type": "Microsoft.ContainerInstance/containerGroups",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}-aci', parameters('resourceNamePrefix'))]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "containers": [
+          {
+            "name": "hello-world",
+            "properties": {
+              "image": "mcr.microsoft.com/azuredocs/aci-helloworld",
+              "ports": [
+                {
+                  "port": 8080,
+                  "protocol": "TCP"
+                }
+              ],
+              "resources": {
+                "requests": {
+                  "cpu": 1,
+                  "memoryInGB": 1
+                }
+              }
+            }
+          }
+        ],
+        "osType": "Linux",
+        "restartPolicy": "Always",
+        "ipAddress": {
+          "type": "Public",
+          "ports": [
+            {
+              "port": 8080,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
