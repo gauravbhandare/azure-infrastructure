@@ -2,7 +2,9 @@
 param sqlServerPassword string
 
 param location string = resourceGroup().location
-param resourceNamePrefix string = 'promitor-testing-resource-${geo}'
+// Use subscription ID for consistent naming across resource groups in the same subscription
+param resourceNamePrefix string = 'promitor-testing-resource-${geo}-${take(uniqueString(subscription().subscriptionId), 6)}'
+param shortResourcePrefix string = 'promitor-${geo}-${take(uniqueString(subscription().subscriptionId), 6)}'
 param region string = 'Europe'
 param geo string = 'eu'
 
@@ -92,6 +94,87 @@ resource applicationInsights 'microsoft.insights/components@2020-02-02' = {
   }
 }
 
+resource webTest 'Microsoft.Insights/webtests@2022-06-15' = {
+  name: '${resourceNamePrefix}-web-app-availability-test'
+  location: location
+  kind: 'ping'
+  properties: {
+    SyntheticMonitorId: '${resourceNamePrefix}-web-app-availability-test'
+    Name: '${resourceNamePrefix}-web-app-availability-test'
+    Description: 'Standard availability test for the web application'
+    Enabled: true
+    Frequency: 300
+    Timeout: 120
+    Kind: 'ping'
+    RetryEnabled: true
+    Locations: [
+      {
+        Id: 'us-ca-sjc-azr'
+      }
+      {
+        Id: 'us-tx-sn1-azr'
+      }
+      {
+        Id: 'us-il-ch1-azr'
+      }
+      {
+        Id: 'us-va-ash-azr'
+      }
+      {
+        Id: 'us-fl-mia-edge'
+      }
+    ]
+    Configuration: {
+      WebTest: '<WebTest Name="${resourceNamePrefix}-web-app-availability-test" Id="ABD48C0C-2F0D-4F5F-8E2E-8F5F8F5F8F5F" Enabled="True" CssProjectStructure="" CssIteration="" Timeout="120" WorkItemIds="" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010" Description="" CredentialUserName="" CredentialPassword="" PreAuthenticate="True" Proxy="default" StopOnError="False" RecordedResultFile="" ResultsLocale=""><Items><Request Method="GET" Guid="a5f10126-e4cd-570d-961c-cea43999a200" Version="1.1" Url="https://${webApp.properties.defaultHostName}" ThinkTime="0" Timeout="120" ParseDependentRequests="True" FollowRedirects="True" RecordResult="True" Cache="False" ResponseTimeGoal="0" Encoding="utf-8" ExpectedHttpStatusCode="200" ExpectedResponseUrl="" ReportingName="" IgnoreHttpStatusCode="False" /></Items></WebTest>'
+    }
+  }
+  tags: {
+    'hidden-link:${applicationInsights.id}': 'Resource'
+  }
+}
+
+resource webTestAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: '${resourceNamePrefix}-web-app-availability-alert'
+  location: 'global'
+  properties: {
+    description: 'Alert when web app availability test fails'
+    severity: 1
+    enabled: true
+    scopes: [
+      applicationInsights.id
+    ]
+    evaluationFrequency: 'PT1M'
+    windowSize: 'PT5M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'AvailabilityTestFailure'
+          metricNamespace: 'Microsoft.Insights/components'
+          metricName: 'availabilityResults/availabilityPercentage'
+          operator: 'LessThan'
+          threshold: 100
+          timeAggregation: 'Average'
+          criterionType: 'StaticThresholdCriterion'
+          dimensions: [
+            {
+              name: 'availabilityResult/name'
+              operator: 'Include'
+              values: [
+                '${resourceNamePrefix}-web-app-availability-test'
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    actions: []
+  }
+  tags: {
+    'hidden-link:${applicationInsights.id}': 'Resource'
+  }
+}
+
 resource classicApplicationInsights 'microsoft.insights/components@2020-02-02' = {
   name: '${resourceNamePrefix}-telemetry-classic'
   location: location
@@ -116,7 +199,7 @@ resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2021-11-01' = {
 }
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2022-09-01' = {
-  name: 'promitortestingstorage'
+  name: 'promitorstorage${take(uniqueString(subscription().subscriptionId), 6)}'
   location: location
   sku: {
     name: 'Standard_LRS'
@@ -337,7 +420,7 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
 }
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-02-01' = {
-  name: 'promitorsecretstore'
+  name: 'promitorsecrets${take(uniqueString(subscription().subscriptionId), 6)}'
   location: location
   properties: {
     sku: {
@@ -350,8 +433,8 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-02-01' = {
 }
 
 resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2023-04-15' = {
-  name: '${resourceNamePrefix}-cosmos-db'
-  location: location
+  name: '${shortResourcePrefix}-cosmos-db'
+  location: alternativeLocation
   tags: {
     CosmosAccountType: 'Non-Production'
   }
@@ -372,7 +455,7 @@ resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2023-04-15' = {
     }
     locations: [
       {
-        locationName: location
+        locationName: alternativeLocation
         failoverPriority: 0
         isZoneRedundant: false
       }
